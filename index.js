@@ -1,8 +1,18 @@
-import { test } from "./js_vainilla/vainilla.js";
-
 const path = "./1brc/measurements.txt";
 
-async function processLargeFile(processBlock) {
+// Register the Service Worker
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .register("/web_workers/worker.js", { scope: "/web_workers/" })
+    .then((registration) => {
+      console.log("Service Worker registrado correctamente:", registration);
+    })
+    .catch((error) => {
+      console.error("Error al registrar el Service Worker:", error);
+    });
+}
+
+async function processLargeFile() {
   // Get the file with fetch
   const response = await fetch(path);
 
@@ -13,8 +23,32 @@ async function processLargeFile(processBlock) {
   //Buffer for the process
   let buffer = "";
 
-  //1 million lines
-  const BLOCK_SIZE = 1000 * 1000;
+  const BLOCK_SIZE = 10 * 1000;
+
+  // Create a new worker
+  const worker = new Worker("./web_workers/worker.js");
+
+  let resolveWorkerPromise;
+  // Promises to track worker completion
+  let workerPromise = new Promise((resolve) => {
+    resolveWorkerPromise = resolve;
+  });
+  worker.onmessage = function (event) {
+    if (event.data === "done") {
+      // Resolve the worker promise to indicate that the block has been processed
+      resolveWorkerPromise();
+    }
+  };
+
+  // Function to process block using workers
+  function processBlockWithWorker(block) {
+    workerPromise = new Promise((resolve) => {
+      workerPromise.resolve = resolve();
+      worker.postMessage({ block });
+    });
+
+    return workerPromise;
+  }
 
   // Reads and process every fragment
   async function readBlock(chunk) {
@@ -29,14 +63,13 @@ async function processLargeFile(processBlock) {
       const block = lines.splice(0, BLOCK_SIZE);
 
       // Process the block
-      await processBlock(block.join("\n"));
+      await processBlockWithWorker(block.join("\n"));
     }
-
     // Update the buffer
     buffer = lines.join("\n");
   }
 
-  // Infinite bucle to read the file
+  // // Infinite bucle to read the file
   while (true) {
     // Read a fragment
     const { done, value } = await reader.read();
@@ -45,11 +78,11 @@ async function processLargeFile(processBlock) {
     if (done) {
       // If there is data in the "block", it process it
       if (buffer.length > 0) {
-        await processBlock(buffer);
+        await processBlockWithWorker(buffer);
       }
 
       console.log("Proceso completado correctamente");
-
+      worker.terminate();
       break;
     }
 
@@ -57,6 +90,18 @@ async function processLargeFile(processBlock) {
     await readBlock(value);
   }
 }
-
+// Init Timer
+const start = performance.now();
 // Llama a la función con la ruta del archivo y la función de procesamiento
-processLargeFile(test);
+processLargeFile().then(() => {
+  //End timer
+  const end = performance.now();
+
+  const durationMs = end - start;
+
+  // Convertir a minutos y segundos
+  const minutes = Math.floor(durationMs / (1000 * 60));
+  const seconds = ((durationMs % (1000 * 60)) / 1000).toFixed(2);
+
+  console.log(`Duration: ${minutes} minutos ${seconds} segundos`);
+});

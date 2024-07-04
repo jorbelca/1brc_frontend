@@ -1,5 +1,3 @@
-import { testRead } from "./testingOptimizations/testingReads.js";
-
 const path = "./1brc/measurements.txt";
 
 // Register the Service Worker
@@ -14,95 +12,111 @@ if ("serviceWorker" in navigator) {
     });
 }
 
-export async function processLargeFile(size) {
-  const start = performance.now();
-  // Get the file with fetch
-  const response = await fetch(path);
+export async function processLargeFile() {
+  try {
+    const BLOCK_SIZE = 15000;
+    const WORKER_COUNT = navigator.hardwareConcurrency || 2;
 
-  // Create the reader
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder("utf-8");
+    // Get the file with fetch
+    const response = await fetch(path);
 
-  //Buffer for the process
-  let buffer = "";
+    // Create the reader
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
 
-  const BLOCK_SIZE = size;
+    //Buffer for the process
+    let buffer = "";
 
-  // Create a new worker
-  const worker = new Worker("./web_workers/worker.js");
+    // Create an array of  new workers
+    const workers = Array.from(
+      { length: WORKER_COUNT },
+      () => new Worker("./web_workers/worker.js")
+    );
+    let workerIndex = 0;
 
-  let resolveWorkerPromise;
-  // Promises to track worker completion
-  let workerPromise = new Promise((resolve) => {
-    resolveWorkerPromise = resolve;
-  });
-  worker.onmessage = function (event) {
-    if (event.data === "done") {
-      // Resolve the worker promise to indicate that the block has been processed
-      resolveWorkerPromise();
+    function getNextWorker() {
+      workerIndex = (workerIndex + 1) % WORKER_COUNT;
+      return workers[workerIndex];
     }
-  };
 
-  // Function to process block using workers
-  function processBlockWithWorker(block) {
-    workerPromise = new Promise((resolve) => {
-      workerPromise.resolve = resolve();
-      worker.postMessage({ block });
+    // Promises to track worker completion
+    const workerPromises = workers.map((worker) => {
+      new Promise((resolve) => {
+        worker.onmessage = function (event) {
+          if (event.data === "done") {
+            resolve();
+          }
+        };
+      });
     });
 
-    return workerPromise;
-  }
+    // Function to process block using workers
+    async function processBlockWithWorker(block) {
+      const worker = getNextWorker();
+      const promise = new Promise((resolve) => {
+        worker.onmessage = function (event) {
+          if (event.data === "done") {
+            resolve();
+          }
+        };
+      });
 
-  // Reads and process every fragment
-  async function readBlock(chunk) {
-    // Decodes and += to the buffer
-    buffer += decoder.decode(chunk, { stream: true });
-
-    // Divides the buffer in lines
-    let lines = buffer.split("\n");
-
-    while (lines.length > BLOCK_SIZE) {
-      // Separates the blocks in the correct size
-      const block = lines.splice(0, BLOCK_SIZE);
-
-      // Process the block
-      await processBlockWithWorker(block.join("\n"));
+      worker.postMessage({ block });
+      await promise;
     }
-    // Update the buffer
-    buffer = lines.join("\n");
-  }
 
-  // // Infinite bucle to read the file
-  while (true) {
-    // Read a fragment
-    const { done, value } = await reader.read();
+    // Reads and process every fragment
+    async function readBlock(chunk) {
+      // Decodes and += to the buffer
+      buffer += decoder.decode(chunk, { stream: true });
 
-    // End the reading
-    if (done) {
-      // If there is data in the "block", it process it
-      if (buffer.length > 0) {
-        await processBlockWithWorker(buffer);
+      // Divides the buffer in lines
+      let lines = buffer.split("\n");
+
+      while (lines.length > BLOCK_SIZE) {
+        // Separates the blocks in the correct size
+        const block = lines.splice(0, BLOCK_SIZE);
+        // Process the block
+        await processBlockWithWorker(block.join("\n"));
       }
-      const end = performance.now();
-
-      console.log("Proceso completado correctamente");
-      worker.terminate();
-
-      return end - start;
+      // Update the buffer
+      buffer = lines.join("\n");
     }
 
-    //call the function
-    await readBlock(value);
+    // // Infinite bucle to read the file
+    while (true) {
+      // Read a fragment
+      const { done, value } = await reader.read();
+
+      // End the reading
+      if (done) {
+        // If there is data in the "block", it process it
+        if (buffer.length > 0) {
+          await processBlockWithWorker(buffer);
+        }
+        console.log("Proceso completado correctamente");
+
+        await Promise.all(workerPromises);
+        workers.forEach((worker) => worker.terminate());
+        break;
+      }
+
+      //call the function
+      await readBlock(value);
+    }
+  } catch (error) {
+    console.error(error);
   }
 }
 // Init Timer
+const start = performance.now();
+//Call to the function
 
-// Llama a la función con la ruta del archivo y la función de procesamiento
-// processLargeFile().then(() => {
-//   //End timer
-// });
-
-testRead();
+processLargeFile().then(() => {
+  //End timer
+  const end = performance.now();
+  console.log(convertTime(end - start));
+});
 
 export function convertTime(durationMs) {
   //Convert to minuts and seconds

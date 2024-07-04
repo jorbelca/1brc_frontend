@@ -1,3 +1,5 @@
+import { testRead } from "./testingOptimizations/testingReads.js";
+
 const path = "./1brc/measurements.txt";
 
 // Register the Service Worker
@@ -12,7 +14,8 @@ if ("serviceWorker" in navigator) {
     });
 }
 
-async function processLargeFile() {
+export async function processLargeFile(size) {
+  const start = performance.now();
   // Get the file with fetch
   const response = await fetch(path);
 
@@ -23,7 +26,7 @@ async function processLargeFile() {
   //Buffer for the process
   let buffer = "";
 
-  const BLOCK_SIZE = 10 * 1000;
+  const BLOCK_SIZE = size;
 
   // Create a new worker
   const worker = new Worker("./web_workers/worker.js");
@@ -80,10 +83,12 @@ async function processLargeFile() {
       if (buffer.length > 0) {
         await processBlockWithWorker(buffer);
       }
+      const end = performance.now();
 
       console.log("Proceso completado correctamente");
       worker.terminate();
-      break;
+
+      return end - start;
     }
 
     //call the function
@@ -91,17 +96,17 @@ async function processLargeFile() {
   }
 }
 // Init Timer
-const start = performance.now();
+
 // Llama a la función con la ruta del archivo y la función de procesamiento
-processLargeFile().then(() => {
-  //End timer
-  const end = performance.now();
+// processLargeFile().then(() => {
+//   //End timer
+// });
 
-  const durationMs = end - start;
+testRead();
 
-  // Convertir a minutos y segundos
+export function convertTime(durationMs) {
+  //Convert to minuts and seconds
   const minutes = Math.floor(durationMs / (1000 * 60));
   const seconds = ((durationMs % (1000 * 60)) / 1000).toFixed(2);
-
-  console.log(`Duration: ${minutes} minutos ${seconds} segundos`);
-});
+  return `Duration: ${minutes} minutes ${seconds} seconds`;
+}

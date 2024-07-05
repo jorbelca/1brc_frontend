@@ -34,11 +34,6 @@ export async function processLargeFile() {
     );
     let workerIndex = 0;
 
-    function getNextWorker() {
-      workerIndex = (workerIndex + 1) % WORKER_COUNT;
-      return workers[workerIndex];
-    }
-
     // Promises to track worker completion
     const workerPromises = workers.map((worker) => {
       new Promise((resolve) => {
@@ -52,7 +47,8 @@ export async function processLargeFile() {
 
     // Function to process block using workers
     async function processBlockWithWorker(block) {
-      const worker = getNextWorker();
+      const worker = workers[workerIndex];
+      workerIndex = (workerIndex + 1) % WORKER_COUNT;
       const promise = new Promise((resolve) => {
         worker.onmessage = function (event) {
           if (event.data === "done") {
@@ -75,9 +71,9 @@ export async function processLargeFile() {
 
       while (lines.length > BLOCK_SIZE) {
         // Separates the blocks in the correct size
-        const block = lines.splice(0, BLOCK_SIZE);
+        const block = lines.splice(0, BLOCK_SIZE).join("\n");
         // Process the block
-        await processBlockWithWorker(block.join("\n"));
+        await processBlockWithWorker(block);
       }
       // Update the buffer
       buffer = lines.join("\n");

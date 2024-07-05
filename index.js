@@ -23,7 +23,7 @@ async function processLargeFile() {
   //Buffer for the process
   let buffer = "";
 
-  const BLOCK_SIZE = 10 * 1000;
+  const BLOCK_SIZE = 15 * 1000;
 
   // Create a new worker
   const worker = new Worker("./web_workers/worker.js");
@@ -92,16 +92,18 @@ async function processLargeFile() {
 }
 // Init Timer
 const start = performance.now();
-// Llama a la función con la ruta del archivo y la función de procesamiento
+// Call the function
 processLargeFile().then(() => {
   //End timer
   const end = performance.now();
 
   const durationMs = end - start;
-
-  // Convertir a minutos y segundos
-  const minutes = Math.floor(durationMs / (1000 * 60));
-  const seconds = ((durationMs % (1000 * 60)) / 1000).toFixed(2);
-
-  console.log(`Duration: ${minutes} minutos ${seconds} segundos`);
+  convertTime(durationMs);
 });
+
+export function convertTime(durationMs) {
+  //Convert to minuts and seconds
+  const minutes = Math.floor(durationMs / (1000 * 60));
+  const seconds = Math.round((durationMs % (1000 * 60)) / 1000);
+  return `Duration: ${minutes} minutes ${seconds} seconds`;
+}

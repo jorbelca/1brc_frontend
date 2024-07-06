@@ -1,4 +1,6 @@
-const path = "./1brc/measurements.txt";
+import { initWebGPU } from "./web_gpu/gpuCalc.js";
+
+export const path = "./1brc/measurements.txt";
 
 // Register the Service Worker
 if ("serviceWorker" in navigator) {
@@ -92,18 +94,23 @@ async function processLargeFile() {
 }
 // Init Timer
 const start = performance.now();
-// Call the function
-processLargeFile().then(() => {
-  //End timer
-  const end = performance.now();
+// WEB WORKERS + VAINILLA_JS
+// processLargeFile().then(() => {
+//   //End timer and calculate the total duration
+//   const totalDuration = performance.now() - start;
+//   console.log(convertTime(totalDuration));
+// });
 
-  const durationMs = end - start;
-  convertTime(durationMs);
+// WEB GPU
+initWebGPU().then(() => {
+  const totalDuration = performance.now() - start;
+  console.log(convertTime(totalDuration));
 });
 
 export function convertTime(durationMs) {
   //Convert to minuts and seconds
   const minutes = Math.floor(durationMs / (1000 * 60));
   const seconds = Math.round((durationMs % (1000 * 60)) / 1000);
+
   return `Duration: ${minutes} minutes ${seconds} seconds`;
 }

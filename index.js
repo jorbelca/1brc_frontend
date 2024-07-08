@@ -1,18 +1,18 @@
-import { initWebGPU } from "./web_gpu/gpuCalc.js";
+import { initWebGPU } from "./web_gpu/initWGpu.js";
 
 export const path = "./1brc/measurements.txt";
 
 // Register the Service Worker
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker
-    .register("/web_workers/worker.js", { scope: "/web_workers/" })
-    .then((registration) => {
-      console.log("Service Worker registrado correctamente:", registration);
-    })
-    .catch((error) => {
-      console.error("Error al registrar el Service Worker:", error);
-    });
-}
+// if ("serviceWorker" in navigator) {
+//   navigator.serviceWorker
+//     .register("/web_workers/worker.js", { scope: "/web_workers/" })
+//     .then((registration) => {
+//       console.log("Service Worker registrado correctamente:", registration);
+//     })
+//     .catch((error) => {
+//       console.error("Error al registrar el Service Worker:", error);
+//     });
+// }
 
 async function processLargeFile() {
   // Get the file with fetch
@@ -102,7 +102,8 @@ const start = performance.now();
 // });
 
 // WEB GPU
-initWebGPU().then(() => {
+initWebGPU().then((res) => {
+  console.log(res);
   const totalDuration = performance.now() - start;
   console.log(convertTime(totalDuration));
 });

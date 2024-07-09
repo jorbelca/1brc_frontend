@@ -7,7 +7,7 @@ export async function initWebGPU() {
     }
 
     const adapter = await navigator.gpu.requestAdapter({
-      powerPreference: "low-power",
+      powerPreference: "high-performance",
     });
     if (!adapter) {
       throw Error("Couldn't request WebGPU adapter.");
@@ -24,7 +24,5 @@ export async function initWebGPU() {
     throw error;
   }
 }
-
-
 
 //float16 -> https://developer.chrome.com/blog/io24-webassembly-webgpu-2

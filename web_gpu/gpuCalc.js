@@ -1,6 +1,5 @@
 export async function processDataWithGPU(device, data) {
   // Verificar que data sea un arreglo de strings
-
   if (!Array.isArray(data) || data.length === 0) {
     throw new Error("Los datos proporcionados no son válidos.");
   }
@@ -38,70 +37,71 @@ export async function processDataWithGPU(device, data) {
   });
   // In structs, WebGPU uses comma to separate values, WebGL ;
   const shaderModule = device.createShaderModule({
-    code: /*glsl*/ `
-     enable f16;
-
-      struct StationData 
-      { minTemp: f16,
-        maxTemp: f16,
-        sumTemp: f16,
+    code: /*wgsl*/ `
+      struct StationData {
+        minTemp: f32,
+        maxTemp: f32,
+        sumTemp: f32,
         count: u32,
       };
 
-      @group(0) @binding(0) var<storage, read_write> dataBuffer: array<f16>;
+      @group(0) @binding(0) var<storage, read> dataBuffer: array<u32>;
       @group(0) @binding(1) var<storage, read_write> resultBuffer: array<StationData>;
 
+     const NUM_STATIONS: u32 = 10000u;
+
       @compute @workgroup_size(256)
-      fn main(@builtin(global_invocation_id) global_id: vec3<f16>) {
-        let index = global_id.x;
+      fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+        let index:u32 = global_id.x;
 
         // Leer la línea del buffer de datos
-        var line: array<f16, 256>; // Suponer longitud máxima de línea
-        for (var i = 0; i < 256; i = i + 1) {
-          line[i] = dataBuffer[index * 256 + i];
+        var line: array<u32, 64>; // Suponer longitud máxima de línea en palabras de 4 bytes
+        for (var i:u32 = 0u; i < 64u; i = i + 1u) {
+          line[i] = dataBuffer[index * 64u + i];
         }
 
         // Buscar el separador ';' y extraer la estación y temperatura
-        var stationHash: f16 = 0;
-        var temperature: f16 = 0.0;
+        var stationHash: u32 = 0u;
+        var temperature: f32 = 0.0;
         var parsingTemperature = false;
-        var tempString: array<u8, 16>;
-        var tempIndex = 0;
+        var tempString: array<u32, 16>;
+        var tempIndex:u32 = 0u;
 
-        for (var i = 0; i < 256; i = i + 1) {
-          if (line[i] == 59) { // ';'
+         for (var i:u32 = 0u; i < 64u; i = i + 1u) {
+          let char = line[i] & 0xFFu;
+          if (char == 59u) { // ';'
             parsingTemperature = true;
           } else if (parsingTemperature) {
-            tempString[tempIndex] = line[i];
-            tempIndex = tempIndex + 1;
+            tempString[tempIndex] = char;
+            tempIndex = tempIndex + 1u;
           } else {
-            stationHash = stationHash * 31 + f16(line[i]); // Hash simple de estación
+            stationHash = stationHash * 31u + char; // Hash simple de estación
           }
         }
 
         // Convertir tempString a f32
-        var tempStr ;
-        for (var i = 0; i < tempIndex; i = i + 1) {
-          tempStr = tempStr + f16(tempString[i] - 48) * pow(10, tempIndex - i - 1);
+        var tempStr: f32 = 0.0;
+        for (var i:u32 = 0u; i < tempIndex; i = i + 1u) {
+          tempStr = tempStr + f32(tempString[i] - 48u) * pow(10.0, f32(tempIndex - i - 1u));
         }
-        temperature = f16(tempStr);
+        temperature = tempStr;
 
         // Actualizar resultados
-        let result = &resultBuffer[stationHash % resultBuffer.length];
-        atomicMin(&result.minTemp, temperature);
-        atomicMax(&result.maxTemp, temperature);
-        atomicAdd(&result.sumTemp, temperature);
-        atomicAdd(&result.count, 1);
+        let resultIndex = stationHash % NUM_STATIONS;
+        let result = &resultBuffer[resultIndex];
+        result.minTemp = min(result.minTemp, temperature);
+        result.maxTemp = max(result.maxTemp, temperature);
+        result.sumTemp = result.sumTemp + temperature;
+        result.count = result.count + 1u;
       }
     `,
   });
-
   const bindGroupLayout = device.createBindGroupLayout({
     entries: [
       {
         binding: 0,
         visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: "storage" },
+        buffer: { type: "read-only-storage" },
       },
       {
         binding: 1,

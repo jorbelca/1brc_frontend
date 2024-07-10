@@ -1,3 +1,4 @@
+import { processWithWASM } from "./wasm/processFileWasm.js";
 import { initWebGPU } from "./web_gpu/initWGpu.js";
 
 export const path = "./1brc/measurements.txt";
@@ -102,7 +103,14 @@ const start = performance.now();
 // });
 
 // WEB GPU
-initWebGPU().then((res) => {
+// initWebGPU().then((res) => {
+//   console.log(res);
+//   const totalDuration = performance.now() - start;
+//   console.log(convertTime(totalDuration));
+// });
+
+//WASM
+processWithWASM().then((res) => {
   console.log(res);
   const totalDuration = performance.now() - start;
   console.log(convertTime(totalDuration));

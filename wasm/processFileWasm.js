@@ -27,7 +27,7 @@ export async function processWithWASM() {
       _tzset_js: () => {},
       __lock: () => {},
       __unlock: () => {},
-      memory: new WebAssembly.Memory({ initial: 0, maximum: 256 }),
+      memory: new WebAssembly.Memory({ initial: 256, maximum: 256 }),
       table: new WebAssembly.Table({
         initial: 1,
         maximum: 1,
@@ -104,11 +104,3 @@ export async function processWithWASM() {
     throw error;
   }
 }
-
-//To compile the C++ file
-// emcc processDataWithC++.cpp -o processDataWithC++.js \
-// -s WASM=1 \
-// -s EXPORTED_FUNCTIONS="['_process_and_get_results', '_malloc', '_free']" \
-// -s EXPORTED_RUNTIME_METHODS="['cwrap', 'getValue']" \
-// --no-entry \
-// --std=c++17

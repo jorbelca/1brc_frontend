@@ -1,11 +1,13 @@
 #include <iostream>
 #include <sstream>
-#include <map> // Usar map para ordenar alfabéticamente
+#include <map>
 #include <limits>
 #include <string>
-#include <iomanip> // Para usar std::setprecision
+#include <iomanip>
+#include <algorithm>
+#include <vector>
 
-// Estructura para almacenar los datos de cada estación
+// Struct for the data
 struct StationData
 {
     double min_temp = std::numeric_limits<double>::max();
@@ -13,10 +15,31 @@ struct StationData
     double sum_temp = 0.0;
     int count = 0;
 };
+// Function to trim spaces from both ends of a C-style string
+void trim(char *str)
+{
+    char *end;
+
+    // Trim leading space
+    while (isspace((unsigned char)*str))
+        str++;
+
+    if (*str == 0) // All spaces
+        return;
+
+    // Trim trailing space
+    end = str + strlen(str) - 1;
+    while (end > str && isspace((unsigned char)*end))
+        end--;
+
+    // Write new null terminator
+    *(end + 1) = 0;
+}
 
 extern "C"
 {
-    // Función que procesa los datos y devuelve los resultados
+
+    // This function process the data and returns in the format established
     const char *process_and_get_results(const char *chunk)
     {
         std::map<std::string, StationData> stationMap;
@@ -25,12 +48,19 @@ extern "C"
 
         while (std::getline(file, line))
         {
+
             std::stringstream ss(line);
             std::string station;
             double temperature;
 
             if (std::getline(ss, station, ';') && ss >> temperature)
             {
+                // Convert station name to C-style string for trimming
+                std::vector<char> station_cstr(station.begin(), station.end());
+                station_cstr.push_back('\0');
+                trim(station_cstr.data());
+                station = std::string(station_cstr.data());
+
                 auto &data = stationMap[station];
                 data.min_temp = std::min(data.min_temp, temperature);
                 data.max_temp = std::max(data.max_temp, temperature);
@@ -40,11 +70,11 @@ extern "C"
         }
 
         std::ostringstream results;
-        results << std::fixed << std::setprecision(2); // Establecer precisión de dos decimales
+        results << std::fixed << std::setprecision(2); // Two decimals
 
         if (stationMap.empty())
         {
-            std::cout << "DEBUG: No hay datos en stationMap" << std::endl;
+            std::cout << "DEBUG: No data in stationMap" << std::endl;
             return "";
         }
 
@@ -65,20 +95,18 @@ extern "C"
             resultStr.pop_back();
         }
 
-        // Devolver la cadena de resultados
+        // Return the string with the result
         char *resultPtr = new char[resultStr.size() + 1];
         std::strcpy(resultPtr, resultStr.c_str());
         return resultPtr;
     }
 }
 
-// Prueba de que funciona el script en c++
-//  int main()
-//  {
-//      const char *data_chunk = "StationA;25.5\nStationB;30.0\nStationA;20.0\nStationB;35.0\n";
+// To compile
 
-//     std::string results = process_and_get_results(data_chunk);
-//     std::cout << "Resultados: " << results << std::endl;
-
-//     return 0;
-// }
+// emcc processDataWithC++.cpp -o processDataWithC++.js \
+//   -s WASM=1 \
+//   -s EXPORTED_FUNCTIONS="['_process_and_get_results', '_malloc', '_free']" \
+//   -s EXPORTED_RUNTIME_METHODS="['cwrap', 'getValue']" \
+//   --no-entry \
+//   --std=c++17

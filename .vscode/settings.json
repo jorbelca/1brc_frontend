@@ -46,6 +46,9 @@
     "unordered_map": "cpp",
     "variant": "cpp",
     "vector": "cpp",
-    "algorithm": "cpp"
+    "algorithm": "cpp",
+    "__tree": "cpp",
+    "iomanip": "cpp",
+    "map": "cpp"
   }
 }

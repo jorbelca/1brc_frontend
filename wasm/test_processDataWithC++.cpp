@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <sstream>
 #include <map>
 #include <limits>
@@ -6,6 +7,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <cstring>
+#include <chrono> // Library for time
 
 // Struct for the data
 struct StationData
@@ -26,13 +28,12 @@ std::string trim(const std::string &str)
     return str.substr(first, last - first + 1);
 }
 // This function process the data and returns in the format established
-const char *process_and_get_results(const char *chunk)
+const char *process_and_get_results(std::ifstream &infile)
 {
     std::map<std::string, StationData> stationMap;
-    std::stringstream file(chunk);
     std::string line;
 
-    while (std::getline(file, line))
+    while (std::getline(infile, line))
     {
         std::stringstream ss(line);
         std::string station;
@@ -85,12 +86,34 @@ const char *process_and_get_results(const char *chunk)
 int main()
 {
     // DATA IN
-    const char *data_chunk = "Mombasa;14.1\nVancouver;- 2.3\n Hamilton;5.5 \nDubai;25.6\n Beijing;2.2 \nAtlanta;36.4\n Pyongyang;20.5\n Flores, Petén;7.2\n Palm Springs;25.7\n Dili;18.1\n Kyoto;12.3\n Canberra;2.3\n Denpasar;21.4\n Marrakesh;9.8\n Xi'an;23.9\n San Francisco; 17.0\n Lusaka; 9.9\n Phnom Penh; 21.9 \nPyongyang; 6.0\n Petropavlovsk - Kamchatsky; 5.0\n Toronto; 17.5 \nJos;26.7\nJos; 31.3\nAlexandria; 25.1\nWarsaw; 6.9\nPhnom Penh; 14.5 ";
+    // const char *data_chunk = "Mombasa;14.1\nVancouver;- 2.3\n Hamilton;5.5 \nDubai;25.6\n Beijing;2.2 \nAtlanta;36.4\n Pyongyang;20.5\n Flores, Petén;7.2\n Palm Springs;25.7\n Dili;18.1\n Kyoto;12.3\n Canberra;2.3\n Denpasar;21.4\n Marrakesh;9.8\n Xi'an;23.9\n San Francisco; 17.0\n Lusaka; 9.9\n Phnom Penh; 21.9 \nPyongyang; 6.0\n Petropavlovsk - Kamchatsky; 5.0\n Toronto; 17.5 \nJos;26.7\nJos; 31.3\nAlexandria; 25.1\nWarsaw; 6.9\nPhnom Penh; 14.5 ";
 
-    std::string results = process_and_get_results(data_chunk);
+    auto start = std::chrono::high_resolution_clock::now();
+    // Specify the path to your input file
+    std::string filepath = "../1brc/measurements.txt";
+
+    // Open the file
+    std::ifstream data(filepath);
+    if (!data)
+    {
+        std::cerr << "Error opening file: " << filepath << std::endl;
+        return 1;
+    }
+
+    std::string results = process_and_get_results(data);
+    auto end = std::chrono::high_resolution_clock::now();
+    data.close();
+    // Stop measuring time
+
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(end - start);
+
+    // Calculate minutes and seconds
+    auto minutes = std::chrono::duration_cast<std::chrono::minutes>(duration);
+    auto seconds = duration - std::chrono::duration_cast<std::chrono::seconds>(minutes);
+
     std::cout << "Results: " << results << std::endl;
-
-
+    std::cout << "Execution time: " << minutes.count() << " minutes and "
+              << seconds.count() << " seconds" << std::endl;
     return 0;
 }
 

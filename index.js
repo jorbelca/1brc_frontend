@@ -1,5 +1,5 @@
-import { processWithWASM } from "./wasm/processFileWasm.js";
 import { initWebGPU } from "./web_gpu/initWGpu.js";
+import { testProcessDataWithGPU } from "./web_gpu/testProcessDataWithGPU.js";
 
 export const path = "./1brc/measurements.txt";
 
@@ -95,26 +95,18 @@ async function processLargeFile() {
 }
 // Init Timer
 const start = performance.now();
-// WEB WORKERS + VAINILLA_JS
-// processLargeFile().then(() => {
-//   //End timer and calculate the total duration
-//   const totalDuration = performance.now() - start;
-//   console.log(convertTime(totalDuration));
-// });
-
-// WEB GPU
-// initWebGPU().then((res) => {
-//   console.log(res);
-//   const totalDuration = performance.now() - start;
-//   console.log(convertTime(totalDuration));
-// });
-
-//WASM
-processWithWASM().then((res) => {
-  console.log(res);
+// WEB WORKERS + VAINILLA_JS || WASM
+processLargeFile().then(() => {
+  //End timer and calculate the total duration
   const totalDuration = performance.now() - start;
   console.log(convertTime(totalDuration));
 });
+
+// WEB GPU
+// testProcessDataWithGPU().then(() => {
+//   const totalDuration = performance.now() - start;
+//   console.log(convertTime(totalDuration));
+// });
 
 export function convertTime(durationMs) {
   //Convert to minuts and seconds

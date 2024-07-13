@@ -1,6 +1,6 @@
-function parseAndCalculate(block) {
+async function parseAndCalculate(block) {
   //The task is to write a  program which reads the file, calculates the min, mean, and max temperature value per weather station,
-  // and emits the results on stdout like this(i.e. sorted alphabetically by station name, 
+  // and emits the results on stdout like this(i.e. sorted alphabetically by station name,
   //and the result values per station in the format `<min>/<mean>/<max>`, rounded to one fractional digit):
   let stations = {};
   const dataSeparated = block.split("\n");

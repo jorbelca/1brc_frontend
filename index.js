@@ -96,8 +96,9 @@ async function processLargeFile() {
 // Init Timer
 const start = performance.now();
 // WEB WORKERS + VAINILLA_JS || WASM
-processLargeFile().then(() => {
+processLargeFile().then((res) => {
   //End timer and calculate the total duration
+  console.log(res);
   const totalDuration = performance.now() - start;
   console.log(convertTime(totalDuration));
 });

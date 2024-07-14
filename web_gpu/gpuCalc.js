@@ -3,30 +3,41 @@ export async function processDataWithGPU(device, data) {
   if (!Array.isArray(data) || data.length === 0) {
     throw new Error("Los datos proporcionados no son válidos.");
   }
-  // Preparar datos para la GPU
-  const encoder = new TextEncoder();
-  let dataStr = data.map((item) => item + "\n").join("");
-  let encodedData = encoder.encode(dataStr);
 
-  // Alinear los datos a múltiplos de 4
-  const padding = (4 - (encodedData.byteLength % 4)) % 4;
-  if (padding > 0) {
-    const paddedData = new Uint8Array(encodedData.byteLength + padding);
-    paddedData.set(encodedData);
-    encodedData = paddedData;
+  const stations = new Map();
+  const encodedData = [];
+
+  data = data.toString().split(" ");
+  // Iterar sobre los datos para construir el array de datos
+  for (let line of data) {
+    // Dividir la línea en estación y temperatura
+    const [station, temp] = line.split(";");
+    let stationCode;
+
+    if (!stations.has(station)) {
+      stationCode = stations.size;
+      stations.set(station, stationCode);
+    } else {
+      stationCode = stations.get(station);
+    }
+
+    // Añadir estación y temperatura al array
+    encodedData.push(stationCode);
+    encodedData.push(parseFloat(temp));
   }
-
+  console.log("Datos de entrada:" + encodedData);
   // Crear buffer en la GPU
   const dataBuffer = device.createBuffer({
-    size: encodedData.byteLength,
+    size: encodedData.length * 4, // 2 elementos (station, temp) por cada entrada, 4 bytes por float
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   });
 
   // Escribir los datos en el buffer
-  device.queue.writeBuffer(dataBuffer, 0, encodedData);
+  const dataArray = new Float32Array(encodedData);
+  device.queue.writeBuffer(dataBuffer, 0, dataArray);
 
   // Crear buffer para resultados (min, max, sum, count por estación)
-  const numStations = 10000; // Suponer un máximo de 1000 estaciones para simplicidad
+  const numStations = stations.size;
   const resultBufferSize = 4 * 4 * numStations; // Min, Max, Sum, Count por cada estación
   const resultBuffer = device.createBuffer({
     size: resultBufferSize,
@@ -35,64 +46,45 @@ export async function processDataWithGPU(device, data) {
       GPUBufferUsage.COPY_SRC |
       GPUBufferUsage.COPY_DST,
   });
+
   // In structs, WebGPU uses comma to separate values, WebGL ;
+  //https://google.github.io/tour-of-wgsl/types/structures/
   const shaderModule = device.createShaderModule({
+    label: "Station Data compute temperature module",
     code: /*wgsl*/ `
-      struct StationData {
+       struct StationData {
         minTemp: f32,
         maxTemp: f32,
         sumTemp: f32,
-        count: u32,
+        count: u32
       };
 
-      @group(0) @binding(0) var<storage, read> dataBuffer: array<u32>;
+      @group(0) @binding(0) var<storage, read> dataBuffer: array<f32>;
       @group(0) @binding(1) var<storage, read_write> resultBuffer: array<StationData>;
-
-     const NUM_STATIONS: u32 = 10000u;
 
       @compute @workgroup_size(256)
       fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-        let index:u32 = global_id.x;
+       let index: u32 = global_id.x * 2u;
 
-        // Leer la línea del buffer de datos
-        var line: array<u32, 64>; // Suponer longitud máxima de línea en palabras de 4 bytes
-        for (var i:u32 = 0u; i < 64u; i = i + 1u) {
-          line[i] = dataBuffer[index * 64u + i];
+      if (index >= arrayLength(&dataBuffer)) {
+        return;
+      }
+
+      let stationCode: u32 = u32(dataBuffer[index]);
+      let temperature: f32 = bitcast<f32>(dataBuffer[index * 2u + 1u]);
+
+        let result = &resultBuffer[stationCode];
+
+        if (result.count == 0) {
+          result.minTemp = temperature;
+          result.maxTemp = temperature;
+        } else {
+          result.minTemp = min(result.minTemp, temperature);
+          result.maxTemp = max(result.maxTemp, temperature);
         }
 
-        // Buscar el separador ';' y extraer la estación y temperatura
-        var stationHash: u32 = 0u;
-        var temperature: f32 = 0.0;
-        var parsingTemperature = false;
-        var tempString: array<u32, 16>;
-        var tempIndex:u32 = 0u;
-
-         for (var i:u32 = 0u; i < 64u; i = i + 1u) {
-          let char = line[i] & 0xFFu;
-          if (char == 59u) { // ';'
-            parsingTemperature = true;
-          } else if (parsingTemperature) {
-            tempString[tempIndex] = char;
-            tempIndex = tempIndex + 1u;
-          } else {
-            stationHash = stationHash * 31u + char; // Hash simple de estación
-          }
-        }
-
-        // Convertir tempString a f32
-        var tempStr: f32 = 0.0;
-        for (var i:u32 = 0u; i < tempIndex; i = i + 1u) {
-          tempStr = tempStr + f32(tempString[i] - 48u) * pow(10.0, f32(tempIndex - i - 1u));
-        }
-        temperature = tempStr;
-
-        // Actualizar resultados
-        let resultIndex = stationHash % NUM_STATIONS;
-        let result = &resultBuffer[resultIndex];
-        result.minTemp = min(result.minTemp, temperature);
-        result.maxTemp = max(result.maxTemp, temperature);
-        result.sumTemp = result.sumTemp + temperature;
-        result.count = result.count + 1u;
+        result.sumTemp += temperature;
+        result.count +=1;
       }
     `,
   });
@@ -135,7 +127,7 @@ export async function processDataWithGPU(device, data) {
   const computePass = commandEncoder.beginComputePass();
   computePass.setPipeline(computePipeline);
   computePass.setBindGroup(0, bindGroup);
-  computePass.dispatchWorkgroups(Math.ceil(data.length / 256));
+  computePass.dispatchWorkgroups(Math.ceil(encodedData.length / 512));
   computePass.end();
 
   device.queue.submit([commandEncoder.finish()]);
@@ -159,18 +151,26 @@ export async function processDataWithGPU(device, data) {
   await resultReadBuffer.mapAsync(GPUMapMode.READ);
   const resultArray = new Float32Array(resultReadBuffer.getMappedRange());
 
+  console.log(resultArray);
   const results = {};
-  for (let i = 0; i < resultArray.length; i += 4) {
-    const station = i / 4;
-    const minTemp = resultArray[i];
-    const maxTemp = resultArray[i + 1];
-    const sumTemp = resultArray[i + 2];
-    const count = resultArray[i + 3];
+  for (let [name, code] of stations.entries()) {
+    const index = code * 4;
+    const minTemp = resultArray[index];
+    const maxTemp = resultArray[index + 1];
+    const sumTemp = resultArray[index + 2];
+    const count = resultArray[index + 3];
+
+    console.log(name + " Count : " + count, name + " SumTemp : " + sumTemp);
     if (count > 0) {
-      const avgTemp = sumTemp / count;
-      results[station] = { min: minTemp, max: maxTemp, avg: avgTemp };
+      results[name] = {
+        min: minTemp.toFixed(1),
+        max: maxTemp.toFixed(1),
+        avg: (sumTemp / count).toFixed(1),
+      };
     }
   }
+
+  console.log("Resultados:", JSON.stringify(results, null, 2));
 
   resultReadBuffer.unmap();
   return results;

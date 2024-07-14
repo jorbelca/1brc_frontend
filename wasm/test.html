@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>WASM Example</title>
+  </head>
+  <body>
+    <script>
+      var Module = {
+        onRuntimeInitialized: function () {
+          var process_chunk = Module.cwrap("process_chunk", null, ["string"]);
+          var get_results = Module.cwrap("get_results", "number", []);
+          var free_results = Module.cwrap("free_results", null, ["number"]);
+
+          const chunk = `Mombasa;14.1
+                Vancouver;-2.3
+                Hamilton;5.5
+                Dubai;25.6
+                Beijing;2.2
+                Atlanta;36.4
+                Pyongyang;20.5
+                Flores,  Petén;7.2
+                Palm Springs;25.7
+                Dili;18.1
+                Kyoto;12.3
+                Canberra;2.3
+                Denpasar;21.4
+                Marrakesh;9.8
+                Xi'an;23.9
+                San Francisco;17.0
+                Lusaka;9.9
+                Phnom Penh;21.9
+                Pyongyang;6.0
+                Petropavlovsk-Kamchatsky;5.0
+                Toronto;17.5
+                Jos;26.7
+                Jos;31.3
+                Alexandria;25.1
+                Warsaw;6.9`;
+          process_chunk(chunk);
+
+          var resultPtr = get_results();
+          var result = Module.UTF8ToString(resultPtr);
+          free_results(resultPtr);
+
+          console.log("Resultados: " + result);
+        },
+      };
+    </script>
+    <script src="processDataWithC++.js"></script>
+  </body>
+</html>

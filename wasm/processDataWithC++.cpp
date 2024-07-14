@@ -6,6 +6,8 @@
 #include <iomanip>
 #include <algorithm>
 #include <vector>
+#include <cstring>
+#include <emscripten/emscripten.h>
 
 // Struct for the data
 struct StationData
@@ -15,6 +17,7 @@ struct StationData
     double sum_temp = 0.0;
     int count = 0;
 };
+
 // Function to trim spaces from both ends of a C-style string
 void trim(char *str)
 {
@@ -24,7 +27,7 @@ void trim(char *str)
     while (isspace((unsigned char)*str))
         str++;
 
-    if (*str == 0) // All spaces
+    if (*str == 0)
         return;
 
     // Trim trailing space
@@ -38,29 +41,26 @@ void trim(char *str)
 
 extern "C"
 {
+    std::map<std::string, StationData> stationMap;
 
-    // This function process the data and returns in the format established
-    const char *process_and_get_results(const char *chunk)
+    EMSCRIPTEN_KEEPALIVE void process_chunk(const char *chunk)
     {
-        std::map<std::string, StationData> stationMap;
         std::stringstream file(chunk);
         std::string line;
 
         while (std::getline(file, line))
         {
-
             std::stringstream ss(line);
             std::string station;
             double temperature;
 
             if (std::getline(ss, station, ';') && ss >> temperature)
             {
-                // Convert station name to C-style string for trimming
                 std::vector<char> station_cstr(station.begin(), station.end());
                 station_cstr.push_back('\0');
                 trim(station_cstr.data());
                 station = std::string(station_cstr.data());
-
+                station.erase(remove_if(station.begin(), station.end(), ::isspace), station.end());
                 auto &data = stationMap[station];
                 data.min_temp = std::min(data.min_temp, temperature);
                 data.max_temp = std::max(data.max_temp, temperature);
@@ -68,15 +68,14 @@ extern "C"
                 data.count++;
             }
         }
+    }
 
+    EMSCRIPTEN_KEEPALIVE const char *get_results()
+    {
         std::ostringstream results;
-        results << std::fixed << std::setprecision(2); // Two decimals
-
+        results << std::fixed << std::setprecision(2);
         if (stationMap.empty())
-        {
-            std::cout << "DEBUG: No data in stationMap" << std::endl;
             return "";
-        }
 
         for (const auto &pair : stationMap)
         {
@@ -91,22 +90,25 @@ extern "C"
         std::string resultStr = results.str();
         if (!resultStr.empty())
         {
-            resultStr.pop_back();
-            resultStr.pop_back();
+            resultStr.pop_back(); // Remove last space
+            resultStr.pop_back(); // Remove last comma
         }
 
-        // Return the string with the result
         char *resultPtr = new char[resultStr.size() + 1];
         std::strcpy(resultPtr, resultStr.c_str());
         return resultPtr;
     }
-}
 
+    EMSCRIPTEN_KEEPALIVE void free_results(const char *ptr)
+    {
+        delete[] ptr;
+    }
+}
 // To compile
 
-// emcc processDataWithC++.cpp -o processDataWithC++.js \
+//  emcc processDataWithC++.cpp -o processDataWithC++.js \
 //   -s WASM=1 \
-//   -s EXPORTED_FUNCTIONS="['_process_and_get_results', '_malloc', '_free']" \
-//   -s EXPORTED_RUNTIME_METHODS="['cwrap', 'getValue']" \
+//   -s EXPORTED_FUNCTIONS="['_process_chunk', '_get_results','_free_results' ,'_malloc', '_free']" \
+//   -s EXPORTED_RUNTIME_METHODS="['cwrap', 'UTF8ToString', 'getValue']" \
 //   --no-entry \
 //   --std=c++17
